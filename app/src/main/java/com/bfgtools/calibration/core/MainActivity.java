@@ -2486,6 +2486,11 @@ public class MainActivity extends Activity implements BfgBleClient.Listener {
             prototypeWriteFailure(DashboardWritePolicy.blockedMessage());
             return;
         }
+        // === 新增：未验证固件组合时，在风险文案里追加提示 ===
+        boolean unverifiedFirmware = read != null && DashboardWritePolicy.needsExtraWarning(
+                read.disDashboardVersionRaw, read.colorDisplayVersionRaw,
+                read.centreControllerVersionRaw, read.disBfgVersionRaw);
+        // =====================================================
         String intro = "本次将写入仪表盘的持久配置，目标为 " + targetVoltage
                 + "V。已读取到指定的四项固件版本，但版本匹配不代表这次写入安全。"
                 + "请停车并核对车辆、电池和备份后再决定。";
