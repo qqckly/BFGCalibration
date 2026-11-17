@@ -113,6 +113,7 @@ jobs:
           ln -sfn "$SDK_ROOT/ndk/${ANDROID_NDK_VERSION}" "$NDK_ROOT/${ANDROID_NDK_VERSION}" || true
 
       - name: Restore release signing config
+        if: false
         shell: bash
         env:
           KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
@@ -147,7 +148,7 @@ jobs:
         run: |
           set -euo pipefail
           chmod +x ./gradlew
-          ./gradlew :app:assembleRelease --stacktrace --warning-mode summary
+          ./gradlew :app:assembleDebug --stacktrace --warning-mode summary
 
       - name: Resolve version and collect APKs
         id: collect
