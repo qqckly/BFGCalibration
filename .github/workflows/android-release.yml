@@ -1,7 +1,7 @@
 name: Android Release
 
 # 手动触发，不随 push 自动构建。
-# 只构建 release 变体，构建完成后把 APK 挂到 GitHub Release。
+# 【临时改动】当前为 debug 构建，用于验证固件白名单修改；发正式版前需还原。
 on:
   workflow_dispatch:
     inputs:
@@ -112,6 +112,7 @@ jobs:
           mkdir -p "$NDK_ROOT"
           ln -sfn "$SDK_ROOT/ndk/${ANDROID_NDK_VERSION}" "$NDK_ROOT/${ANDROID_NDK_VERSION}" || true
 
+      # === 改动 1：保留 if: false，跳过 release 签名恢复 ===
       - name: Restore release signing config
         if: false
         shell: bash
@@ -143,6 +144,7 @@ jobs:
           EOF
           echo "Release signing config restored."
 
+      # === 改动 2：assembleRelease -> assembleDebug ===
       - name: Build release APKs
         shell: bash
         run: |
@@ -150,6 +152,7 @@ jobs:
           chmod +x ./gradlew
           ./gradlew :app:assembleDebug --stacktrace --warning-mode summary
 
+      # === 改动 3：find 路径 apk/release -> apk/debug ===
       - name: Resolve version and collect APKs
         id: collect
         shell: bash
@@ -163,9 +166,9 @@ jobs:
           [ -n "$TAG" ] || TAG="v${VERSION_NAME}"
 
           mkdir -p dist
-          find app/build/outputs/apk/release -type f -name '*.apk' -exec cp {} dist/ \;
+          find app/build/outputs/apk/debug -type f -name '*.apk' -exec cp {} dist/ \;
           COUNT=$(find dist -maxdepth 1 -name '*.apk' | wc -l)
-          [ "$COUNT" -gt 0 ] || { echo "::error::No release APK produced"; exit 1; }
+          [ "$COUNT" -gt 0 ] || { echo "::error::No APK produced"; exit 1; }
 
           echo "version_name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
           echo "version_code=$VERSION_CODE" >> "$GITHUB_OUTPUT"
@@ -173,7 +176,9 @@ jobs:
           echo "Collected $COUNT APK(s) for tag $TAG (versionName=$VERSION_NAME)"
           ls -lh dist
 
+      # === 改动 4：debug 包用调试密钥，跳过 release 签名校验 ===
       - name: Verify signing of release APKs
+        if: false
         shell: bash
         run: |
           set -euo pipefail
@@ -183,7 +188,9 @@ jobs:
             "$APKSIGNER" verify --print-certs "$apk" | head -5
           done
 
+      # === 改动 5：强制手动下载 Artifact，不自动发 Release ===
       - name: Publish GitHub Release
+        if: false
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.collect.outputs.tag }}
@@ -198,16 +205,20 @@ jobs:
 
             - commit: `${{ github.sha }}`
             - 构建时间: ${{ github.event.repository.updated_at }}
-            - 签名: release keystore（CI secrets 注入）
-
-            安装包：
-            - `BFGCalibration_${{ steps.collect.outputs.version_name }}_universal.apk` — 通用包，推荐
-            - `BFGCalibration_${{ steps.collect.outputs.version_name }}_arm64-v8a.apk` — 64 位 ARM
-            - `BFGCalibration_${{ steps.collect.outputs.version_name }}_armeabi-v7a.apk` — 32 位 ARM
+            - 签名: Debug keystore（CI 临时构建）
 
             最低 Android 12（API 31）。
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # === 改动 6：新增，把 APK 作为 Artifact 上传，供手动下载 ===
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bfg-calibration-debug-${{ steps.collect.outputs.version_name }}
+          path: dist/*.apk
+          if-no-files-found: error
+          retention-days: 30
 
       - name: Upload build reports on failure
         if: ${{ failure() }}
